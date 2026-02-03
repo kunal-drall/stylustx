@@ -1,0 +1,27 @@
+[package]
+name = "stylustx-paymaster"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+stylus-sdk = "0.10.0"
+alloy-primitives = { version = "1.2", default-features = false }
+alloy-sol-types = { version = "1.2", default-features = false }
+
+[dev-dependencies]
+tokio = { version = "1.12.0", features = ["full"] }
+
+[features]
+default = []
+export-abi = ["stylus-sdk/export-abi"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+codegen-units = 1
+strip = true
+lto = true
+panic = "abort"
+opt-level = "s"
