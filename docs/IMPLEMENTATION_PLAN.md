@@ -84,12 +84,36 @@ StylusTx is a gas abstraction layer that enables gasless transactions on Arbitru
   - Transaction history display
   - Responsive dark theme design
 
+#### Session 3 (2026-02-04 continued)
+**Completed:**
+- [x] Fixed WASM reference-types compatibility issue for Stylus deployment
+- [x] Downgraded from stylus-sdk v0.10.0 to v0.6.0 (compatible with Stylus runtime)
+- [x] Downgraded from Rust 1.87.0 to 1.79.0 (avoids reference-types WASM features)
+- [x] Updated alloy-primitives/alloy-sol-types to v0.7.6 for compatibility
+- [x] Removed stylus-core dependency (not needed for v0.6.x)
+- [x] Changed #[external] to #[public] macro
+- [x] Added unsafe blocks for RawCall::call() operations
+- [x] Removed event logging (incompatible with older alloy version)
+- [x] Contract passes `cargo stylus check` validation
+- [x] Contract size: 12.0 KB, WASM data fee: 0.000073 ETH
+- [x] Created deployment scripts (deploy-paymaster.sh, initialize-paymaster.sh)
+- [x] Installed Foundry toolchain for contract interaction
+
+**Pending:**
+- [ ] Fund deployer wallet with Arbitrum Sepolia ETH
+- [ ] Deploy contract to Arbitrum Sepolia
+- [ ] Initialize contract with target address
+
+**Deployer Wallet:**
+- Address: 0x9E0279D2E15BA1441C29b4Bc866b516d9814cA71
+- Required funds: ~0.001 ETH on Arbitrum Sepolia
+- Faucet: https://faucet.quicknode.com/arbitrum/sepolia
+
 **Notes:**
-- Updated stylus-sdk from v0.6.0 (guide) to v0.10.0 (latest compatible)
-- Updated alloy-primitives/alloy-sol-types to v1.2 for compatibility
-- cargo-stylus v0.10.0 requires Stylus.toml and rust-toolchain.toml files
-- Major API changes in v0.10.0: RawCall, evm::log → vm().log(), block/msg functions moved to vm()
-- Added stylus-core dependency for CallContext and MutatingCallContext traits
+- Stylus runtime doesn't support WASM reference-types feature
+- Newer Rust compilers (1.82+) enable reference-types by default
+- Solution: Use Rust 1.79.0 + stylus-sdk 0.6.0 for compatibility
+- cargo-stylus v0.5.6 works with stylus-sdk 0.6.0
 
 ---
 
