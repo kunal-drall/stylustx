@@ -2,4 +2,7 @@
 target = "wasm32-unknown-unknown"
 
 [target.wasm32-unknown-unknown]
-rustflags = ["-C", "link-arg=-zstack-size=8192"]
+rustflags = [
+    "-C", "link-arg=-zstack-size=8192",
+    "-C", "target-cpu=mvp"
+]

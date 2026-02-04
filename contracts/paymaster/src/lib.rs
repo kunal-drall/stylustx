@@ -9,13 +9,16 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 use stylus_sdk::{
-    alloy_primitives::{Address, B256, U256},
+    alloy_primitives::{Address, FixedBytes, U256},
     prelude::*,
     crypto::keccak,
-    call::{call, RawCall},
+    call::RawCall,
+    msg, block,
 };
 use alloy_sol_types::{sol, SolError};
-use stylus_core::{calls::MutatingCallContext, CallContext};
+
+// Type alias for B256 (32-byte hash)
+type B256 = FixedBytes<32>;
 
 // =============================================================================
 // STORAGE
@@ -35,35 +38,6 @@ sol_storage! {
         /// Whether the contract has been initialized
         bool initialized;
     }
-}
-
-// =============================================================================
-// EVENTS
-// =============================================================================
-
-sol! {
-    /// Emitted when a meta-transaction is executed
-    event MetaTxExecuted(
-        address indexed user,
-        address indexed target,
-        uint256 nonce,
-        bool success
-    );
-
-    /// Emitted when the allowed target is updated
-    event TargetUpdated(
-        address indexed old_target,
-        address indexed new_target
-    );
-
-    /// Emitted when the contract is paused or unpaused
-    event PausedStateChanged(bool paused);
-
-    /// Emitted when ownership is transferred
-    event OwnershipTransferred(
-        address indexed previous_owner,
-        address indexed new_owner
-    );
 }
 
 // =============================================================================
@@ -106,37 +80,6 @@ const ECRECOVER_PRECOMPILE: Address = Address::new([
 ]);
 
 // =============================================================================
-// CALL CONTEXT FOR EXTERNAL CALLS
-// =============================================================================
-
-/// Context for making external calls with value
-struct CallWithValue {
-    gas_amount: u64,
-    call_value: U256,
-}
-
-impl CallWithValue {
-    fn new(value: U256) -> Self {
-        Self {
-            gas_amount: u64::MAX, // Use all available gas
-            call_value: value,
-        }
-    }
-}
-
-impl CallContext for CallWithValue {
-    fn gas(&self) -> u64 {
-        self.gas_amount
-    }
-}
-
-unsafe impl MutatingCallContext for CallWithValue {
-    fn value(&self) -> U256 {
-        self.call_value
-    }
-}
-
-// =============================================================================
 // IMPLEMENTATION
 // =============================================================================
 
@@ -153,7 +96,7 @@ impl StylusTxPaymaster {
             return Err(AlreadyInitialized {}.abi_encode());
         }
 
-        self.owner.set(self.vm().msg_sender());
+        self.owner.set(msg::sender());
         self.allowed_target.set(target);
         self.initialized.set(true);
         self.paused.set(false);
@@ -189,7 +132,7 @@ impl StylusTxPaymaster {
         }
 
         // 3. Check deadline hasn't passed
-        let current_time = U256::from(self.vm().block_timestamp());
+        let current_time = U256::from(block::timestamp());
         if current_time > deadline {
             return Err(DeadlineExpired { deadline, current_time }.abi_encode());
         }
@@ -216,28 +159,14 @@ impl StylusTxPaymaster {
         }
 
         // 7. Execute the call to target contract
-        let context = CallWithValue::new(value);
-        let result = call(self.vm(), context, to, &data);
+        let result = unsafe {
+            RawCall::new_delegate()
+                .call(to, &data)
+        };
 
         match result {
-            Ok(return_data) => {
-                self.vm().log(MetaTxExecuted {
-                    user: from,
-                    target: to,
-                    nonce,
-                    success: true,
-                });
-                Ok(return_data)
-            }
-            Err(_) => {
-                self.vm().log(MetaTxExecuted {
-                    user: from,
-                    target: to,
-                    nonce,
-                    success: false,
-                });
-                Err(CallFailed {}.abi_encode())
-            }
+            Ok(return_data) => Ok(return_data),
+            Err(_) => Err(CallFailed {}.abi_encode()),
         }
     }
 
@@ -290,11 +219,7 @@ impl StylusTxPaymaster {
     /// Update the allowed target contract (owner only)
     pub fn set_allowed_target(&mut self, new_target: Address) -> Result<(), Vec<u8>> {
         self.only_owner()?;
-
-        let old_target = self.allowed_target.get();
         self.allowed_target.set(new_target);
-
-        self.vm().log(TargetUpdated { old_target, new_target });
         Ok(())
     }
 
@@ -302,7 +227,6 @@ impl StylusTxPaymaster {
     pub fn pause(&mut self) -> Result<(), Vec<u8>> {
         self.only_owner()?;
         self.paused.set(true);
-        self.vm().log(PausedStateChanged { paused: true });
         Ok(())
     }
 
@@ -310,18 +234,13 @@ impl StylusTxPaymaster {
     pub fn unpause(&mut self) -> Result<(), Vec<u8>> {
         self.only_owner()?;
         self.paused.set(false);
-        self.vm().log(PausedStateChanged { paused: false });
         Ok(())
     }
 
     /// Transfer ownership to a new address (owner only)
     pub fn transfer_ownership(&mut self, new_owner: Address) -> Result<(), Vec<u8>> {
         self.only_owner()?;
-
-        let previous_owner = self.owner.get();
         self.owner.set(new_owner);
-
-        self.vm().log(OwnershipTransferred { previous_owner, new_owner });
         Ok(())
     }
 }
@@ -333,7 +252,7 @@ impl StylusTxPaymaster {
 impl StylusTxPaymaster {
     /// Check that caller is the owner
     fn only_owner(&self) -> Result<(), Vec<u8>> {
-        if self.vm().msg_sender() != self.owner.get() {
+        if msg::sender() != self.owner.get() {
             return Err(NotOwner {}.abi_encode());
         }
         Ok(())
@@ -379,10 +298,9 @@ impl StylusTxPaymaster {
 
         // Call ecrecover precompile at address 0x01 using static call
         let result = unsafe {
-            RawCall::new_static(self.vm())
+            RawCall::new_static()
                 .call(ECRECOVER_PRECOMPILE, &input)
-                .map_err(|_| EcrecoverFailed {}.abi_encode())?
-        };
+        }.map_err(|_| EcrecoverFailed {}.abi_encode())?;
 
         if result.len() < 32 {
             return Err(EcrecoverFailed {}.abi_encode());
