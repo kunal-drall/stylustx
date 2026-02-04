@@ -30,14 +30,15 @@ StylusTx is a gas abstraction layer that enables gasless transactions on Arbitru
 - [x] **Phase 1**: Environment & Foundation (Day 1) - COMPLETED
 - [x] **Phase 2**: Stylus Contract (Day 2) - COMPLETED
 - [ ] **Phase 3**: Deploy Contract (Day 3 Morning) - READY TO START
-- [ ] **Phase 4**: TypeScript SDK (Day 3 Afternoon) - NOT STARTED
-- [ ] **Phase 5**: Demo Application (Day 4) - NOT STARTED
-- [ ] **Phase 6**: Deploy Demo (Day 5 Morning) - NOT STARTED
+- [x] **Phase 4**: TypeScript SDK (Day 3 Afternoon) - COMPLETED
+- [x] **Phase 5**: Demo Application (Day 4) - COMPLETED
+- [ ] **Phase 6**: Deploy Demo (Day 5 Morning) - READY TO START
 - [ ] **Phase 7**: Documentation & Polish (Day 5 Afternoon) - NOT STARTED
 
 ### Key Deliverables Status
 - [ ] Contract deployed to Arbitrum Sepolia
-- [ ] SDK functional and tested
+- [x] SDK functional (stylustx-sdk package)
+- [x] Demo application built (React + Vite)
 - [ ] Demo live at public URL
 - [ ] Documentation complete
 - [ ] Grant proposal materials ready
@@ -70,6 +71,18 @@ StylusTx is a gas abstraction layer that enables gasless transactions on Arbitru
 - [x] Updated to stylus-sdk v0.10.0 API (msg_sender, block_timestamp, log, call)
 - [x] Contract compiles successfully to WASM (~10.7 KB optimized)
 - [x] Committed and pushed Phase 2 implementation
+- [x] Created contract ABI for SDK integration
+- [x] Built TypeScript SDK (Phase 4):
+  - StylusTxClient class for contract interaction
+  - Message hash computation matching contract
+  - ECDSA signature handling with ethers.js v6
+  - Full TypeScript type definitions
+- [x] Built Demo Application (Phase 5):
+  - React + Vite application
+  - MetaMask wallet connection
+  - Gasless transaction signing UI
+  - Transaction history display
+  - Responsive dark theme design
 
 **Notes:**
 - Updated stylus-sdk from v0.6.0 (guide) to v0.10.0 (latest compatible)
@@ -89,7 +102,7 @@ stylustx/
 │   ├── Stylus.toml                # Stylus workspace config ✅
 │   ├── rust-toolchain.toml        # Rust version pinning ✅
 │   ├── src/
-│   │   └── lib.rs                 # Main contract (~150 lines) 🔄
+│   │   └── lib.rs                 # Main contract (~400 lines) ✅
 │   └── tests/
 │       └── integration.rs         # Contract tests
 │
@@ -305,8 +318,49 @@ stylustx/
 
 ---
 
-## Phase 4-7: See Full Plan Below
-(Phases 4-7 details to be expanded as we progress)
+## Phase 4: TypeScript SDK (Day 3 Afternoon)
+**Duration**: 2-3 hours
+**Status**: ✅ COMPLETED
+
+### Implementation Details
+- **StylusTxClient class**: Main SDK interface for gasless transactions
+- **Message hashing**: Exact match with contract's compute_hash() function
+- **Signature handling**: ECDSA signature creation and parsing with ethers.js v6
+- **Type definitions**: Full TypeScript types for all SDK interfaces
+- **Constants**: Chain configs, ABI, domain separator
+
+### Files Created
+- `sdk/src/client.ts` - Main StylusTxClient class
+- `sdk/src/types.ts` - TypeScript type definitions
+- `sdk/src/constants.ts` - Contract ABI, chain configs
+- `sdk/src/utils/hashing.ts` - Message hash computation
+- `sdk/src/index.ts` - Public exports
+
+---
+
+## Phase 5: Demo Application (Day 4)
+**Duration**: 3-4 hours
+**Status**: ✅ COMPLETED
+
+### Implementation Details
+- **React + Vite**: Modern frontend stack
+- **MetaMask integration**: Wallet connection and network switching
+- **Gasless TX signing**: Sign transactions without paying gas
+- **Transaction history**: Track signed and executed transactions
+- **Responsive design**: Dark theme, mobile-friendly
+
+### Files Created
+- `demo/src/App.tsx` - Main application component
+- `demo/src/hooks/useWallet.ts` - Wallet connection hook
+- `demo/src/components/WalletConnect.tsx` - Wallet UI
+- `demo/src/components/GaslessTxForm.tsx` - Transaction form
+- `demo/src/components/StatusDisplay.tsx` - Transaction history
+- `demo/src/App.css` - Styling
+
+---
+
+## Phase 6-7: Remaining Work
+(To be completed after contract deployment)
 
 ---
 
@@ -392,14 +446,28 @@ RELAYER_PRIVATE_KEY=0x...            # Wallet that pays gas
 
 ## 🚦 Next Steps (Resume Here)
 
+### Completed
+- ✅ Phase 1: Environment & Foundation
+- ✅ Phase 2: Stylus Paymaster Contract (~400 lines Rust)
+- ✅ Phase 4: TypeScript SDK (stylustx-sdk)
+- ✅ Phase 5: Demo Application (React + Vite)
+
 ### To Continue Development:
-1. **Phase 3 - Deployment**: Get testnet wallet funded with Arbitrum Sepolia ETH
-2. Create `.env` file with `DEPLOYER_PRIVATE_KEY`
-3. Deploy contract: `cargo stylus deploy -e https://sepolia-rollup.arbitrum.io/rpc --private-key=$DEPLOYER_PRIVATE_KEY`
-4. Initialize contract with target address
-5. Export ABI for SDK: `cargo stylus export-abi > contracts/paymaster/abi.json`
-6. **Phase 4 - SDK**: Build TypeScript SDK using exported ABI
-7. **Phase 5 - Demo**: Create React demo application
+1. **Phase 3 - Deploy Contract**:
+   - Get testnet wallet funded with Arbitrum Sepolia ETH (~0.1 ETH)
+   - Create `.env` file with `DEPLOYER_PRIVATE_KEY`
+   - Deploy: `cargo stylus deploy -e https://sepolia-rollup.arbitrum.io/rpc --private-key=$DEPLOYER_PRIVATE_KEY`
+   - Initialize contract with target address
+
+2. **Phase 6 - Deploy Demo**:
+   - Update demo `.env` with deployed contract addresses
+   - Deploy demo to Vercel/Netlify
+   - Test full gasless transaction flow
+
+3. **Phase 7 - Documentation & Polish**:
+   - Create README with setup instructions
+   - Document API reference
+   - Prepare grant proposal materials
 
 ### Version Notes:
 - **stylus-sdk**: v0.10.0 (updated from guide's v0.6.0)
@@ -410,7 +478,7 @@ RELAYER_PRIVATE_KEY=0x...            # Wallet that pays gas
 ---
 
 **Last Updated**: 2026-02-04
-**Plan Status**: Phase 2 Complete, Phase 3 Ready
+**Plan Status**: Phases 1, 2, 4, 5 Complete - Ready for Deployment
 **Next Phase**: Phase 3 - Deploy Contract to Arbitrum Sepolia
 
 ---
