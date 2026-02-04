@@ -1,0 +1,85 @@
+[
+  {
+    "type": "function",
+    "name": "initialize",
+    "inputs": [{"name": "target", "type": "address", "internalType": "address"}],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "execute",
+    "inputs": [
+      {"name": "from", "type": "address"},
+      {"name": "to", "type": "address"},
+      {"name": "value", "type": "uint256"},
+      {"name": "data", "type": "bytes"},
+      {"name": "nonce", "type": "uint256"},
+      {"name": "deadline", "type": "uint256"},
+      {"name": "v", "type": "uint8"},
+      {"name": "r", "type": "bytes32"},
+      {"name": "s", "type": "bytes32"}
+    ],
+    "outputs": [{"name": "", "type": "bytes"}],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getNonce",
+    "inputs": [{"name": "user", "type": "address"}],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getAllowedTarget",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getOwner",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "address"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isPaused",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "bool"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "isInitialized",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "bool"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getMessageHash",
+    "inputs": [
+      {"name": "from", "type": "address"},
+      {"name": "to", "type": "address"},
+      {"name": "value", "type": "uint256"},
+      {"name": "data", "type": "bytes"},
+      {"name": "nonce", "type": "uint256"},
+      {"name": "deadline", "type": "uint256"}
+    ],
+    "outputs": [{"name": "", "type": "bytes32"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "MetaTxExecuted",
+    "inputs": [
+      {"name": "user", "type": "address", "indexed": true},
+      {"name": "target", "type": "address", "indexed": true},
+      {"name": "nonce", "type": "uint256", "indexed": false},
+      {"name": "success", "type": "bool", "indexed": false}
+    ]
+  }
+]
