@@ -145,7 +145,16 @@ sol! {
     error DailyLimitExceeded(uint256 limit, uint256 used);
     /// Transaction exceeds gas cap
     error GasCapExceeded(uint256 cap, uint256 requested);
+    /// Batch execution failed at index
+    error BatchExecutionFailed(uint256 index);
+    /// Batch is empty
+    error EmptyBatch();
+    /// Batch exceeds maximum size
+    error BatchTooLarge(uint256 size, uint256 max);
 }
+
+/// Maximum transactions in a single batch
+const MAX_BATCH_SIZE: usize = 10;
 
 // =============================================================================
 // IMPLEMENTATION
@@ -208,6 +217,41 @@ impl StylusTxPaymaster {
         self.locked.set(true);
 
         let result = self.execute_internal(from, to, value, data, nonce, deadline, v, r, s);
+
+        self.locked.set(false);
+        result
+    }
+
+    /// Execute multiple meta-transactions in a single call (batch execution)
+    /// All transactions must succeed or the entire batch fails (atomic)
+    /// @param froms Array of signer addresses
+    /// @param tos Array of target addresses
+    /// @param values Array of ETH values
+    /// @param datas Array of calldata
+    /// @param nonces Array of nonces
+    /// @param deadlines Array of deadlines
+    /// @param vs Array of signature v components
+    /// @param rs Array of signature r components
+    /// @param ss Array of signature s components
+    pub fn execute_batch(
+        &mut self,
+        froms: Vec<Address>,
+        tos: Vec<Address>,
+        values: Vec<U256>,
+        datas: Vec<Vec<u8>>,
+        nonces: Vec<U256>,
+        deadlines: Vec<U256>,
+        vs: Vec<u8>,
+        rs: Vec<B256>,
+        ss: Vec<B256>,
+    ) -> Result<Vec<Vec<u8>>, Vec<u8>> {
+        // Reentrancy guard
+        if self.locked.get() {
+            return Err(ReentrancyGuard {}.abi_encode());
+        }
+        self.locked.set(true);
+
+        let result = self.execute_batch_internal(froms, tos, values, datas, nonces, deadlines, vs, rs, ss);
 
         self.locked.set(false);
         result
@@ -482,6 +526,73 @@ impl StylusTxPaymaster {
             Ok(return_data) => Ok(return_data),
             Err(_) => Err(CallFailed {}.abi_encode()),
         }
+    }
+
+    /// Internal batch execute function (called within reentrancy guard)
+    fn execute_batch_internal(
+        &mut self,
+        froms: Vec<Address>,
+        tos: Vec<Address>,
+        values: Vec<U256>,
+        datas: Vec<Vec<u8>>,
+        nonces: Vec<U256>,
+        deadlines: Vec<U256>,
+        vs: Vec<u8>,
+        rs: Vec<B256>,
+        ss: Vec<B256>,
+    ) -> Result<Vec<Vec<u8>>, Vec<u8>> {
+        let batch_size = froms.len();
+
+        // Validate batch size
+        if batch_size == 0 {
+            return Err(EmptyBatch {}.abi_encode());
+        }
+
+        if batch_size > MAX_BATCH_SIZE {
+            return Err(BatchTooLarge {
+                size: U256::from(batch_size),
+                max: U256::from(MAX_BATCH_SIZE),
+            }.abi_encode());
+        }
+
+        // Validate all arrays have same length
+        if tos.len() != batch_size
+            || values.len() != batch_size
+            || datas.len() != batch_size
+            || nonces.len() != batch_size
+            || deadlines.len() != batch_size
+            || vs.len() != batch_size
+            || rs.len() != batch_size
+            || ss.len() != batch_size
+        {
+            return Err(BatchExecutionFailed { index: U256::ZERO }.abi_encode());
+        }
+
+        let mut results: Vec<Vec<u8>> = Vec::with_capacity(batch_size);
+
+        // Execute each transaction
+        for i in 0..batch_size {
+            let result = self.execute_internal(
+                froms[i],
+                tos[i],
+                values[i],
+                datas[i].clone(),
+                nonces[i],
+                deadlines[i],
+                vs[i],
+                rs[i],
+                ss[i],
+            );
+
+            match result {
+                Ok(data) => results.push(data),
+                Err(_) => {
+                    return Err(BatchExecutionFailed { index: U256::from(i) }.abi_encode());
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     /// Enforce all gas sponsorship policies
