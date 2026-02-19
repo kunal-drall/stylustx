@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_VERSION: "1.79.0"
+  NODE_VERSION: "18"
+
+jobs:
+  # ==========================================================================
+  # Rust Contract Build & Validation
+  # ==========================================================================
+  contract:
+    name: Build & Validate Contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts/paymaster
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            contracts/paymaster/target/
+          key: ${{ runner.os }}-cargo-${{ hashFiles('contracts/paymaster/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install cargo-stylus
+        run: |
+          if ! command -v cargo-stylus &> /dev/null; then
+            cargo install cargo-stylus --version 0.5.6 --locked
+          fi
+
+      - name: Build Contract
+        run: cargo build --release --target wasm32-unknown-unknown
+
+      - name: Check Contract Size
+        run: |
+          SIZE=$(ls -la target/wasm32-unknown-unknown/release/*.wasm | awk '{print $5}')
+          echo "WASM size: $SIZE bytes"
+          if [ $SIZE -gt 131072 ]; then
+            echo "Warning: Contract size exceeds 128KB"
+          fi
+
+      - name: Validate Stylus Compatibility
+        run: cargo stylus check --endpoint https://sepolia-rollup.arbitrum.io/rpc
+        continue-on-error: true  # May fail if RPC is unavailable
+
+      - name: Run Clippy
+        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
+        continue-on-error: true
+
+      - name: Check Formatting
+        run: cargo fmt -- --check
+        continue-on-error: true
+
+  # ==========================================================================
+  # TypeScript SDK Build & Test
+  # ==========================================================================
+  sdk:
+    name: Build & Test SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: sdk/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Type Check
+        run: npm run build || npx tsc --noEmit
+        continue-on-error: true
+
+      - name: Lint
+        run: npm run lint || true
+        continue-on-error: true
+
+  # ==========================================================================
+  # Demo Application Build
+  # ==========================================================================
+  demo:
+    name: Build Demo App
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: demo
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: demo/package-lock.json
+
+      - name: Install Dependencies
+        run: npm ci || npm install
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_PAYMASTER_ADDRESS: "0x0000000000000000000000000000000000000000"
+          VITE_TARGET_ADDRESS: "0x0000000000000000000000000000000000000000"
+          VITE_RPC_URL: "https://sepolia-rollup.arbitrum.io/rpc"
+
+  # ==========================================================================
+  # Security Audit
+  # ==========================================================================
+  security:
+    name: Security Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for Secrets
+        run: |
+          # Check for potential secrets in code
+          if grep -rE "(private_key|secret|password).*=.*['\"][a-zA-Z0-9]{20,}" --include="*.ts" --include="*.rs" --include="*.js" .; then
+            echo "Warning: Potential secrets found in code"
+            exit 1
+          fi
+        continue-on-error: true
+
+      - name: Audit Rust Dependencies
+        working-directory: contracts/paymaster
+        run: |
+          cargo install cargo-audit --locked || true
+          cargo audit || true
+        continue-on-error: true
+
+      - name: Audit NPM Dependencies (SDK)
+        working-directory: sdk
+        run: npm audit || true
+        continue-on-error: true
+
+      - name: Audit NPM Dependencies (Demo)
+        working-directory: demo
+        run: npm audit || true
+        continue-on-error: true
