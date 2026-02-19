@@ -57,3 +57,39 @@ export interface MetaTxResult {
   /** Error message if failed */
   error?: string;
 }
+
+/**
+ * EIP-712 Domain configuration
+ */
+export interface EIP712Domain {
+  /** Domain name */
+  name: string;
+  /** Domain version */
+  version: string;
+  /** Chain ID */
+  chainId: number;
+  /** Contract address that will verify the signature */
+  verifyingContract: string;
+}
+
+/**
+ * Gas sponsorship policy status
+ */
+export interface PolicyStatus {
+  /** Whether token gate is enabled */
+  tokenGateEnabled: boolean;
+  /** Required token address (if enabled) */
+  requiredToken?: string;
+  /** Required token balance (if enabled) */
+  requiredBalance?: bigint;
+  /** Whether token is ERC721 */
+  isERC721?: boolean;
+  /** Daily transaction limit (0 = unlimited) */
+  dailyTxLimit: bigint;
+  /** User's daily transaction count */
+  userDailyTxCount: bigint;
+  /** Max gas per transaction (0 = unlimited) */
+  maxGasPerTx: bigint;
+  /** Whether user can execute */
+  canExecute: boolean;
+}

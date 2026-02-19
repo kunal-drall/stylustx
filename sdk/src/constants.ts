@@ -1,8 +1,15 @@
 import PAYMASTER_ABI from '../../contracts/paymaster/abi.json';
 
 /**
- * Domain separator used in message hashing
- * MUST match DOMAIN_SEPARATOR in the Stylus contract
+ * EIP-712 Domain configuration
+ */
+export const EIP712_DOMAIN = {
+  name: 'StylusTx',
+  version: '1',
+};
+
+/**
+ * Legacy domain separator (for backwards compatibility)
  */
 export const DOMAIN_SEPARATOR = 'StylusTx';
 
@@ -33,3 +40,17 @@ export const CHAIN_CONFIGS = {
  * Default deadline offset (5 minutes)
  */
 export const DEFAULT_DEADLINE_OFFSET = 5 * 60; // seconds
+
+/**
+ * EIP-712 Type definitions for MetaTransaction
+ */
+export const EIP712_TYPES = {
+  MetaTransaction: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'data', type: 'bytes' },
+    { name: 'nonce', type: 'uint256' },
+    { name: 'deadline', type: 'uint256' },
+  ],
+};
