@@ -329,6 +329,184 @@ export class StylusTxClient {
   getContract(): Contract {
     return this.paymasterContract;
   }
+
+  /**
+   * Sign multiple meta-transactions for batch execution
+   */
+  async signBatchMetaTransactions(
+    transactions: Array<{ to: string; data: string; value?: bigint }>,
+    deadlineOffset: number = DEFAULT_DEADLINE_OFFSET
+  ): Promise<SignedMetaTransaction[]> {
+    if (!this.signer) {
+      throw new Error('No signer configured. Call setSigner() first.');
+    }
+
+    const from = await this.signer.getAddress();
+    let currentNonce = await this.getNonce(from);
+    const deadline = createDeadline(deadlineOffset);
+
+    const signedTransactions: SignedMetaTransaction[] = [];
+
+    for (const tx of transactions) {
+      const metaTx: MetaTransaction = {
+        from,
+        to: tx.to,
+        value: tx.value || 0n,
+        data: tx.data,
+        nonce: currentNonce,
+        deadline,
+      };
+
+      // Create EIP-712 typed data
+      const typedData = createTypedData(metaTx, this.chainId, this.paymasterAddress);
+
+      // Sign using EIP-712
+      const signature = await this.signer.signTypedData(
+        typedData.domain,
+        typedData.types,
+        typedData.message
+      );
+
+      const { r, s, v } = splitSignature(signature);
+
+      signedTransactions.push({
+        ...metaTx,
+        v,
+        r,
+        s,
+      });
+
+      // Increment nonce for next transaction
+      currentNonce = currentNonce + 1n;
+    }
+
+    return signedTransactions;
+  }
+
+  /**
+   * Execute a batch of signed meta-transactions
+   */
+  async executeBatchMetaTransactions(
+    signedTransactions: SignedMetaTransaction[],
+    relayerSigner?: Signer
+  ): Promise<MetaTxResult> {
+    const signerToUse = relayerSigner || this.signer;
+
+    if (!signerToUse) {
+      throw new Error('No signer available to execute transaction');
+    }
+
+    const contractWithSigner = this.paymasterContract.connect(signerToUse);
+
+    try {
+      const froms = signedTransactions.map(tx => tx.from);
+      const tos = signedTransactions.map(tx => tx.to);
+      const values = signedTransactions.map(tx => tx.value);
+      const datas = signedTransactions.map(tx => tx.data);
+      const nonces = signedTransactions.map(tx => tx.nonce);
+      const deadlines = signedTransactions.map(tx => tx.deadline);
+      const vs = signedTransactions.map(tx => tx.v);
+      const rs = signedTransactions.map(tx => tx.r);
+      const ss = signedTransactions.map(tx => tx.s);
+
+      const tx = await contractWithSigner.execute_batch(
+        froms, tos, values, datas, nonces, deadlines, vs, rs, ss
+      );
+
+      const receipt = await tx.wait();
+
+      return {
+        success: true,
+        txHash: receipt.hash,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        txHash: '',
+        error: error.message || 'Batch execution failed',
+      };
+    }
+  }
+
+  /**
+   * Send transactions to a relayer service
+   */
+  async sendToRelayer(
+    signedTx: SignedMetaTransaction,
+    relayerUrl: string
+  ): Promise<MetaTxResult> {
+    try {
+      const response = await fetch(`${relayerUrl}/relay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          from: signedTx.from,
+          to: signedTx.to,
+          value: signedTx.value.toString(),
+          data: signedTx.data,
+          nonce: signedTx.nonce.toString(),
+          deadline: signedTx.deadline.toString(),
+          v: signedTx.v,
+          r: signedTx.r,
+          s: signedTx.s,
+        }),
+      });
+
+      const result = await response.json();
+      return {
+        success: result.success,
+        txHash: result.txHash || '',
+        error: result.error,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        txHash: '',
+        error: error.message || 'Failed to send to relayer',
+      };
+    }
+  }
+
+  /**
+   * Send batch transactions to a relayer service
+   */
+  async sendBatchToRelayer(
+    signedTransactions: SignedMetaTransaction[],
+    relayerUrl: string
+  ): Promise<MetaTxResult> {
+    try {
+      const transactions = signedTransactions.map(tx => ({
+        from: tx.from,
+        to: tx.to,
+        value: tx.value.toString(),
+        data: tx.data,
+        nonce: tx.nonce.toString(),
+        deadline: tx.deadline.toString(),
+        v: tx.v,
+        r: tx.r,
+        s: tx.s,
+      }));
+
+      const response = await fetch(`${relayerUrl}/relay/batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactions }),
+      });
+
+      const result = await response.json();
+      return {
+        success: result.success,
+        txHash: result.txHash || '',
+        error: result.error,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        txHash: '',
+        error: error.message || 'Failed to send batch to relayer',
+      };
+    }
+  }
 }
 
 /**
