@@ -2,6 +2,15 @@
 
 TypeScript SDK for building gasless transactions on Arbitrum using Stylus smart contracts.
 
+## Features
+
+- **Gasless Transactions**: Users sign messages, relayers pay gas
+- **EIP-712 Typed Data**: Better wallet UX with structured signing
+- **Batch Transactions**: Execute multiple transactions atomically
+- **Relayer Integration**: Built-in support for relayer services
+- **Policy Checking**: Query gas sponsorship policies
+- **Full TypeScript Support**: Complete type definitions
+
 ## Installation
 
 ```bash
@@ -25,15 +34,12 @@ const client = new StylusTxClient({
   signer: signer,
 });
 
-// Prepare transaction data (example: calling a function on target contract)
+// Prepare transaction data
 const targetContract = new ethers.Contract(targetAddress, abi, provider);
 const data = targetContract.interface.encodeFunctionData('someFunction', [args]);
 
 // Sign meta-transaction (free for user!)
-const signedTx = await client.signMetaTransaction(
-  targetAddress,
-  data
-);
+const signedTx = await client.signMetaTransaction(targetAddress, data);
 
 // Execute via relayer (relayer pays gas)
 const result = await client.executeMetaTransaction(signedTx, relayerSigner);
@@ -42,114 +48,223 @@ console.log('Transaction hash:', result.txHash);
 
 ## Core Concepts
 
-### Gasless Transactions
-
-StylusTx enables gasless transactions through meta-transactions:
+### Gasless Transaction Flow
 
 1. **User signs** a message off-chain (free, no gas)
-2. **Relayer submits** the signed message to the paymaster contract (relayer pays gas)
-3. **Paymaster verifies** the signature and executes the action
-4. **Target contract** receives the call as if it came from the user
+2. **Relayer submits** the signed message to the paymaster (relayer pays gas)
+3. **Paymaster verifies** the signature using ecrecover
+4. **Target contract** receives the call as if from the user
 
-### Client API
+### EIP-712 Typed Data Signing
 
-#### Initialize Client
+The SDK uses EIP-712 for structured data signing, providing users with clear, readable signing prompts in their wallets instead of opaque hex strings.
+
+## API Reference
+
+### Client Initialization
 
 ```typescript
 const client = new StylusTxClient({
-  paymasterAddress: string,  // Deployed paymaster contract
+  paymasterAddress: string,   // Deployed paymaster contract
   provider: Provider | string, // Ethers provider or RPC URL
-  signer?: Signer,            // User's wallet (optional, can set later)
-  chainId?: number,           // Default: 421614 (Arbitrum Sepolia)
+  signer?: Signer,             // User's wallet (optional)
+  chainId?: number,            // Default: 421614 (Arbitrum Sepolia)
 });
 ```
 
-#### Sign Meta-Transaction
+### Signing Transactions
+
+#### signMetaTransaction
+
+Signs a single meta-transaction using EIP-712 typed data.
 
 ```typescript
 const signedTx = await client.signMetaTransaction(
   to: string,              // Target contract address
-  data: string,            // Encoded function call data
-  value?: bigint,          // ETH value (default: 0)
+  data: string,            // Encoded function call
+  value?: bigint,          // ETH value (default: 0n)
   deadlineOffset?: number  // Seconds until expiry (default: 300)
 );
 ```
 
-#### Execute Meta-Transaction
+#### signBatchMetaTransactions
+
+Signs multiple transactions for batch execution.
 
 ```typescript
-// As relayer with your own signer
-const result = await client.executeMetaTransaction(signedTx, relayerSigner);
+const transactions = [
+  { to: '0x...', data: '0x...', value: 0n },
+  { to: '0x...', data: '0x...' },
+];
 
-// Or if client already has a signer
-const result = await client.executeMetaTransaction(signedTx);
+const signedBatch = await client.signBatchMetaTransactions(
+  transactions,
+  deadlineOffset // optional, default: 300 seconds
+);
 ```
 
-#### Verify Meta-Transaction
+### Executing Transactions
+
+#### executeMetaTransaction
+
+Executes a signed transaction on-chain.
 
 ```typescript
-// Check if a signed transaction is valid before executing
-const isValid = await client.verifyMetaTransaction(signedTx);
+const result = await client.executeMetaTransaction(signedTx, relayerSigner?);
+// Returns: { success: boolean, txHash: string, error?: string }
 ```
 
-#### Get User Nonce
+#### executeBatchMetaTransactions
+
+Executes multiple signed transactions atomically.
+
+```typescript
+const result = await client.executeBatchMetaTransactions(signedBatch, relayerSigner?);
+```
+
+### Relayer Integration
+
+Send transactions to a relayer service instead of executing directly.
+
+#### sendToRelayer
+
+```typescript
+const result = await client.sendToRelayer(signedTx, 'https://relayer.example.com');
+```
+
+#### sendBatchToRelayer
+
+```typescript
+const result = await client.sendBatchToRelayer(signedBatch, 'https://relayer.example.com');
+```
+
+### Query Functions
+
+#### getNonce
 
 ```typescript
 const nonce = await client.getNonce(userAddress);
 ```
 
-## Advanced Usage
-
-### Custom Deadline
+#### getAllowedTarget
 
 ```typescript
-import { createDeadline } from '@stylustx/sdk';
-
-const deadline = createDeadline(600); // 10 minutes from now
-
-const signedTx = await client.signMetaTransaction(
-  targetAddress,
-  data,
-  0n,
-  600
-);
+const target = await client.getAllowedTarget();
 ```
 
-### Manual Message Hash Computation
+#### isInitialized / isPaused
 
 ```typescript
-import { computeMessageHash } from '@stylustx/sdk';
-
-const tx = {
-  from: '0x...',
-  to: '0x...',
-  value: 0n,
-  data: '0x...',
-  nonce: 0n,
-  deadline: 1234567890n,
-};
-
-const messageHash = computeMessageHash(tx);
+const initialized = await client.isInitialized();
+const paused = await client.isPaused();
 ```
 
-### Multiple Chain Support
+#### getPolicyStatus
+
+Check gas sponsorship policy for a user.
 
 ```typescript
-import { CHAIN_CONFIGS } from '@stylustx/sdk';
+const policy = await client.getPolicyStatus(userAddress, gasLimit?);
+// Returns PolicyStatus object with:
+// - tokenGateEnabled: boolean
+// - requiredToken?: string
+// - requiredBalance?: bigint
+// - isERC721?: boolean
+// - dailyTxLimit: bigint
+// - userDailyTxCount: bigint
+// - maxGasPerTx: bigint
+// - canExecute: boolean
+```
 
-// Arbitrum Sepolia (testnet)
-const testnetClient = new StylusTxClient({
-  paymasterAddress: '0x...',
-  provider: CHAIN_CONFIGS.ARBITRUM_SEPOLIA.rpcUrl,
-  chainId: CHAIN_CONFIGS.ARBITRUM_SEPOLIA.chainId,
-});
+#### verifyMetaTransaction
 
-// Arbitrum One (mainnet)
-const mainnetClient = new StylusTxClient({
-  paymasterAddress: '0x...',
-  provider: CHAIN_CONFIGS.ARBITRUM_ONE.rpcUrl,
-  chainId: CHAIN_CONFIGS.ARBITRUM_ONE.chainId,
-});
+Pre-validate a transaction before execution.
+
+```typescript
+const isValid = await client.verifyMetaTransaction(signedTx);
+```
+
+### Utility Functions
+
+#### getDomain
+
+Get EIP-712 domain for this paymaster.
+
+```typescript
+const domain = client.getDomain();
+// Returns: { name, version, chainId, verifyingContract }
+```
+
+#### getPaymasterAddress / getChainId / getContract
+
+```typescript
+const address = client.getPaymasterAddress();
+const chainId = client.getChainId();
+const contract = client.getContract();
+```
+
+## Batch Transactions
+
+Execute multiple operations in a single transaction:
+
+```typescript
+import { StylusTxClient } from '@stylustx/sdk';
+import { ethers } from 'ethers';
+
+const client = new StylusTxClient({ ... });
+
+// Prepare multiple calls
+const transactions = [
+  {
+    to: tokenContract.address,
+    data: tokenContract.interface.encodeFunctionData('approve', [spender, amount]),
+  },
+  {
+    to: dexContract.address,
+    data: dexContract.interface.encodeFunctionData('swap', [tokenIn, tokenOut, amount]),
+  },
+];
+
+// Sign all transactions
+const signedBatch = await client.signBatchMetaTransactions(transactions);
+
+// Execute atomically
+const result = await client.executeBatchMetaTransactions(signedBatch, relayerSigner);
+```
+
+## Relayer Service Integration
+
+For production deployments, send transactions to a backend relayer:
+
+```typescript
+// Sign transaction client-side
+const signedTx = await client.signMetaTransaction(to, data);
+
+// Send to relayer service
+const result = await client.sendToRelayer(signedTx, 'https://your-relayer.com');
+
+if (result.success) {
+  console.log('Submitted! TX:', result.txHash);
+} else {
+  console.error('Failed:', result.error);
+}
+```
+
+## Policy Checking
+
+Check if a user meets gas sponsorship requirements:
+
+```typescript
+const policy = await client.getPolicyStatus(userAddress);
+
+if (!policy.canExecute) {
+  if (policy.tokenGateEnabled) {
+    console.log(`Hold ${policy.requiredBalance} of ${policy.requiredToken}`);
+  }
+  if (policy.userDailyTxCount >= policy.dailyTxLimit) {
+    console.log('Daily limit reached');
+  }
+}
 ```
 
 ## Error Handling
@@ -157,20 +272,22 @@ const mainnetClient = new StylusTxClient({
 ```typescript
 try {
   const result = await client.executeMetaTransaction(signedTx);
-  
+
   if (result.success) {
     console.log('Success!', result.txHash);
   } else {
     console.error('Failed:', result.error);
   }
 } catch (error) {
-  console.error('Transaction error:', error);
+  if (error.message.includes('No signer')) {
+    console.error('Call setSigner() first');
+  } else {
+    console.error('Transaction error:', error);
+  }
 }
 ```
 
 ## TypeScript Types
-
-The SDK is fully typed. Import types as needed:
 
 ```typescript
 import type {
@@ -178,15 +295,18 @@ import type {
   MetaTransaction,
   SignedMetaTransaction,
   MetaTxResult,
+  PolicyStatus,
+  EIP712Domain,
 } from '@stylustx/sdk';
 ```
 
-## Security Considerations
+## Security
 
-- **Nonces**: Prevent replay attacks via sequential nonces
-- **Deadlines**: Transactions expire after the deadline
-- **Target Allowlist**: Only approved contracts can be called
-- **Signature Verification**: ECDSA signatures verified on-chain via ecrecover
+- **Nonce Management**: Sequential nonces prevent replay attacks
+- **Deadlines**: Transactions expire to prevent stale execution
+- **EIP-712 Signing**: Clear signing prompts prevent phishing
+- **Signature Malleability**: S-value normalization per EIP-2
+- **Policy Enforcement**: Token gates and rate limits
 
 ## License
 
